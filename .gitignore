@@ -1,2 +1,6 @@
 .vscode
 wandb
+.ipynb_checkpoints
+COVID-19 Dataset*
+dataset
+__pycache__
