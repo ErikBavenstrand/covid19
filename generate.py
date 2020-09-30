@@ -72,9 +72,10 @@ def rename_files_enumerate(base_path):
     all_files = [
         y for x in os.walk(base_path) for y in glob(os.path.join(x[0], '*.*'))
     ]
-    for i, file in enumerate(all_files[0:3]):
+    for i, file in enumerate(
+            tqdm(all_files, desc='Enumerating files and renaming')):
         filename = path_leaf(file).split('.')[0]
-        new_name = file.replace(filename, str(i))
+        new_name = file.replace(filename, str(i) + '-mendeley')
         os.rename(file, new_name)
 
 
@@ -218,6 +219,7 @@ if __name__ == '__main__':
     WIDTH = args.image_width
     HEIGHT = args.image_height
 
+    rename_files_enumerate(args.images_path)
     convert_images_to_jpg(args.images_path, args.skip_bw)
 
     generate_tfrecord_files(args.tfrecords_path, args.images_path,
