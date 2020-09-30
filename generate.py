@@ -26,10 +26,15 @@ def _int64_list(values):
     return tf.train.Feature(int64_list=tf.train.Int64List(value=values))
 
 
-def _to_tfrecord(tfrec_filewriter, image, label):
+def _byte_list(values):
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=[values]))
+
+
+def _to_tfrecord(tfrec_filewriter, image, label, file_name):
     feature = {
-        "image": _float32_list(image.ravel()),
-        "label": _int64_list([label]),
+        'image': _byte_list(image),
+        'label': _int64_list([label]),
+        'file_name': _byte_list(file_name),
     }
     return tf.train.Example(features=tf.train.Features(feature=feature))
 
@@ -45,20 +50,24 @@ def _encode_image_tfrecord(file_name):
         fn_output_signature=tf.bool),
                             output_type=tf.dtypes.int32)
     image = tf.io.read_file(file_name)
-    image = tf.image.decode_jpeg(image)
-    image = tf.image.resize(image, [WIDTH, HEIGHT]) / 255.0
-    return image, image_label
+    image = tf.image.decode_jpeg(image, channels=3)
+    image = tf.image.resize(image, [WIDTH, HEIGHT])
+    image = tf.cast(image, np.uint8)
+    image = tf.image.encode_jpeg(image)
+    return image, image_label, file_name
 
 
 def _decode_image_tfrecord(example):
     features = {
-        "image": tf.io.FixedLenFeature([WIDTH * HEIGHT], tf.float32),
-        "label": tf.io.FixedLenFeature([1], tf.int64),
+        'image': tf.io.FixedLenFeature([], tf.string),
+        'label': tf.io.FixedLenFeature([1], tf.int64),
+        'file_name': tf.io.FixedLenFeature([], tf.string),
     }
     example = tf.io.parse_single_example(example, features)
 
-    image = tf.reshape(example['image'], shape=[WIDTH, HEIGHT, 1])
+    image = tf.image.decode_jpeg(example['image'], channels=3) / 255
     label = example['label'][0]
+    file_name = example['file_name']
 
     return image, label
 
@@ -80,11 +89,7 @@ def rename_files_enumerate(base_path):
         os.rename(file, new_name)
 
 
-def convert_images_to_jpg(base_path, skip_bw):
-    all_files = [
-        y for x in os.walk(base_path) for y in glob(os.path.join(x[0], '*.*'))
-    ]
-
+def convert_images_to_jpg(base_path):
     jpg_files = [
         y for x in os.walk(base_path)
         for y in glob(os.path.join(x[0], '*.jpg'))
@@ -129,16 +134,15 @@ def convert_images_to_jpg(base_path, skip_bw):
             cv2.imwrite(file.replace('.PNG', '.jpeg'), im)
             os.remove(file)
 
-    if not skip_bw:
-        files = [
-            y for x in os.walk(base_path)
-            for y in glob(os.path.join(x[0], '*.jpeg'))
-        ]
-        if files:
-            for file in tqdm(files, desc='Converting images to b&w'):
-                im = cv2.imread(file)
-                im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-                cv2.imwrite(file, im)
+    files = [
+        y for x in os.walk(base_path)
+        for y in glob(os.path.join(x[0], '*.jpeg'))
+    ]
+    if files:
+        for file in tqdm(files, desc='Converting images to b&w'):
+            im = cv2.imread(file)
+            im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+            cv2.imwrite(file, im)
 
 
 def generate_tfrecord_files(tfrecords_path, images_path, images_per_file):
@@ -154,7 +158,7 @@ def generate_tfrecord_files(tfrecords_path, images_path, images_per_file):
     dataset = images.map(_encode_image_tfrecord,
                          num_parallel_calls=AUTO).batch(images_per_file)
 
-    for file_number, (image, label) in enumerate(
+    for file_number, (image, label, file_name) in enumerate(
             tqdm(dataset, desc='Generating TFRecords')):
         tfrecord_filename = tfrecords_path + "{:02d}-{}.tfrecord".format(
             file_number, images_per_file)
@@ -165,7 +169,8 @@ def generate_tfrecord_files(tfrecords_path, images_path, images_per_file):
                 for i in range(images_in_this_file):
                     example = _to_tfrecord(out_file,
                                            np.array(image)[i],
-                                           label.numpy()[i])
+                                           label.numpy()[i],
+                                           file_name.numpy()[i])
                     out_file.write(example.SerializeToString())
 
 
@@ -198,9 +203,9 @@ if __name__ == '__main__':
                         help='tfrecord path (default: ./dataset/train/)')
     parser.add_argument('--images-per-file',
                         type=int,
-                        default=512,
+                        default=2048,
                         metavar='N',
-                        help='images per tfrecord file (default: 512)')
+                        help='images per tfrecord file (default: 2048)')
     parser.add_argument('--image-width',
                         type=int,
                         default=224,
@@ -211,17 +216,18 @@ if __name__ == '__main__':
                         default=224,
                         metavar='N',
                         help='height of image (default: 224)')
-    parser.add_argument('--skip-bw',
+    parser.add_argument('--skip-conversion',
                         default=False,
                         action='store_true',
-                        help='skip B&W conversion of images')
+                        help='skip conversion and renaming of images')
     args = parser.parse_args()
 
     WIDTH = args.image_width
     HEIGHT = args.image_height
 
-    rename_files_enumerate(args.images_path)
-    convert_images_to_jpg(args.images_path, args.skip_bw)
+    if not args.skip_conversion:
+        rename_files_enumerate(args.images_path)
+        convert_images_to_jpg(args.images_path)
 
     generate_tfrecord_files(args.tfrecords_path, args.images_path,
                             args.images_per_file)
