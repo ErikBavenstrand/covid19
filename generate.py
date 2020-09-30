@@ -74,7 +74,8 @@ def rename_files_enumerate(base_path):
     ]
     for i, file in enumerate(
             tqdm(all_files, desc='Enumerating files and renaming')):
-        filename = path_leaf(file).split('.')[0]
+        filename = path_leaf(file)
+        filename = filename.split('.' + filename.split('.')[-1])[0]
         new_name = file.replace(filename, str(i) + '-mendeley')
         os.rename(file, new_name)
 
