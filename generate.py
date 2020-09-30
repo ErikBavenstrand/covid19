@@ -1,6 +1,7 @@
 import os
 import argparse
 import math
+import ntpath
 
 import cv2
 from glob import glob
@@ -62,7 +63,26 @@ def _decode_image_tfrecord(example):
     return image, label
 
 
+def path_leaf(path):
+    head, tail = ntpath.split(path)
+    return tail or ntpath.basename(head)
+
+
+def rename_files_enumerate(base_path):
+    all_files = [
+        y for x in os.walk(base_path) for y in glob(os.path.join(x[0], '*.*'))
+    ]
+    for i, file in enumerate(all_files[0:3]):
+        filename = path_leaf(file).split('.')[0]
+        new_name = file.replace(filename, str(i))
+        os.rename(file, new_name)
+
+
 def convert_images_to_jpg(base_path, skip_bw):
+    all_files = [
+        y for x in os.walk(base_path) for y in glob(os.path.join(x[0], '*.*'))
+    ]
+
     jpg_files = [
         y for x in os.walk(base_path)
         for y in glob(os.path.join(x[0], '*.jpg'))
