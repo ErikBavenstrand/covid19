@@ -9,11 +9,13 @@ from tqdm import tqdm
 import tensorflow as tf
 import numpy as np
 from Utils import make_dir
+import platform
 
 # Default values
 AUTO = tf.data.experimental.AUTOTUNE
 WIDTH = 224
 HEIGHT = 224
+SYSTEM = platform.system()
 
 # Initial dataset https://data.mendeley.com/datasets/8h65ywd2jr/3
 
@@ -42,10 +44,10 @@ def _to_tfrecord(tfrec_filewriter, image, label, file_name):
     return tf.train.Example(features=tf.train.Features(feature=feature))
 
 
-def _encode_image_tfrecord(file_name):
+def _encode_image_tfrecord_linux(file_name):
     class_folders = tf.constant([
-        '\.\/COVID-19 Dataset\/X-ray\/Non-COVID.+',
-        '\.\/COVID-19 Dataset\/X-ray\/COVID.+'
+            '\.\/COVID-19 Dataset\/X-ray\/Non-COVID.+',
+            '\.\/COVID-19 Dataset\/X-ray\/COVID.+'
     ])
     image_label = tf.argmax(tf.map_fn(
         lambda x: tf.strings.regex_full_match(file_name, x),
@@ -58,6 +60,24 @@ def _encode_image_tfrecord(file_name):
     image = tf.cast(image, np.uint8)
     image = tf.image.encode_jpeg(image)
     return image, image_label, file_name
+
+def _encode_image_tfrecord_windows(file_name):
+    class_folders = tf.constant([
+            '\.\\\\COVID-19 Dataset\\\\X-ray\\\\Non-COVID.+',
+            '\.\\\\COVID-19 Dataset\\\\X-ray\\\\COVID.+'
+    ])
+    image_label = tf.argmax(tf.map_fn(
+        lambda x: tf.strings.regex_full_match(file_name, x),
+        class_folders,
+        fn_output_signature=tf.bool),
+                            output_type=tf.dtypes.int32)
+    image = tf.io.read_file(file_name)
+    image = tf.image.decode_jpeg(image, channels=3)
+    image = tf.image.resize(image, [WIDTH, HEIGHT])
+    image = tf.cast(image, np.uint8)
+    image = tf.image.encode_jpeg(image)
+    return image, image_label, file_name
+
 
 
 def _decode_image_tfrecord(example):
@@ -158,7 +178,13 @@ def generate_tfrecord_files(tfrecords_path, images_path, images_per_file):
         .format(found_images, math.ceil(found_images / images_per_file),
                 images_per_file))
     images = tf.data.Dataset.list_files(images_path_pattern)
-    dataset = images.map(_encode_image_tfrecord,
+    if SYSTEM == 'Linux':
+        encode_image = _encode_image_tfrecord_linux
+    elif SYSTEM == 'Windows':
+        encode_image = _encode_image_tfrecord_windows
+
+    
+    dataset = images.map(encode_image,
                          num_parallel_calls=AUTO).batch(images_per_file)
 
     for file_number, (image, label, file_name) in enumerate(
