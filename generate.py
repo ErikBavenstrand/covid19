@@ -10,9 +10,12 @@ import tensorflow as tf
 import numpy as np
 from Utils import make_dir
 
+# Default values
 AUTO = tf.data.experimental.AUTOTUNE
 WIDTH = 224
 HEIGHT = 224
+
+# Initial dataset https://data.mendeley.com/datasets/8h65ywd2jr/3
 
 
 ######################################################
