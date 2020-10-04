@@ -1,7 +1,10 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import argparse
 import math
 import ntpath
+import platform
 
 import cv2
 from glob import glob
@@ -9,7 +12,6 @@ from tqdm import tqdm
 import tensorflow as tf
 import numpy as np
 from Utils import make_dir
-import platform
 
 # Default values
 AUTO = tf.data.experimental.AUTOTUNE
@@ -46,26 +48,23 @@ def _to_tfrecord(tfrec_filewriter, image, label, file_name):
 
 def _encode_image_tfrecord_linux(file_name):
     class_folders = tf.constant([
-            '\.\/COVID-19 Dataset\/X-ray\/Non-COVID.+',
-            '\.\/COVID-19 Dataset\/X-ray\/COVID.+'
+        '\.\/COVID-19 Dataset\/X-ray\/Non-COVID.+',
+        '\.\/COVID-19 Dataset\/X-ray\/COVID.+'
     ])
-    image_label = tf.argmax(tf.map_fn(
-        lambda x: tf.strings.regex_full_match(file_name, x),
-        class_folders,
-        fn_output_signature=tf.bool),
-                            output_type=tf.dtypes.int32)
-    image = tf.io.read_file(file_name)
-    image = tf.image.decode_jpeg(image, channels=3)
-    image = tf.image.resize(image, [WIDTH, HEIGHT])
-    image = tf.cast(image, np.uint8)
-    image = tf.image.encode_jpeg(image)
-    return image, image_label, file_name
+
+    return _encode_image_tfrecord_common(class_folders)
+
 
 def _encode_image_tfrecord_windows(file_name):
     class_folders = tf.constant([
-            '\.\\\\COVID-19 Dataset\\\\X-ray\\\\Non-COVID.+',
-            '\.\\\\COVID-19 Dataset\\\\X-ray\\\\COVID.+'
+        '\.\\\\COVID-19 Dataset\\\\X-ray\\\\Non-COVID.+',
+        '\.\\\\COVID-19 Dataset\\\\X-ray\\\\COVID.+'
     ])
+
+    return _encode_image_tfrecord_common(class_folders)
+
+
+def _encode_image_tfrecord_common(class_folders):
     image_label = tf.argmax(tf.map_fn(
         lambda x: tf.strings.regex_full_match(file_name, x),
         class_folders,
@@ -77,7 +76,6 @@ def _encode_image_tfrecord_windows(file_name):
     image = tf.cast(image, np.uint8)
     image = tf.image.encode_jpeg(image)
     return image, image_label, file_name
-
 
 
 def _decode_image_tfrecord(example):
@@ -183,7 +181,6 @@ def generate_tfrecord_files(tfrecords_path, images_path, images_per_file):
     elif SYSTEM == 'Windows':
         encode_image = _encode_image_tfrecord_windows
 
-    
     dataset = images.map(encode_image,
                          num_parallel_calls=AUTO).batch(images_per_file)
 
@@ -212,6 +209,13 @@ def read_tfrecord_files(tfrecords_path='./dataset/train/'):
     dataset = dataset.with_options(option_no_order)
     dataset = dataset.map(_decode_image_tfrecord, num_parallel_calls=AUTO)
     return dataset
+
+
+def get_tfrecord_sample_count(tfrecords_path='./dataset/train/'):
+    filenames_tf = tf.io.gfile.glob(tfrecords_path + "*.tfrecord")
+    count = sum(1 for _ in tf.data.TFRecordDataset(filenames_tf,
+                                                   num_parallel_reads=AUTO))
+    return count
 
 
 if __name__ == '__main__':

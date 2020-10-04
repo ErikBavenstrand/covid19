@@ -5,20 +5,22 @@ import argparse
 
 import wandb
 from wandb.keras import WandbCallback
-from generate import read_tfrecord_files
+from generate import read_tfrecord_files, get_tfrecord_sample_count
 from Models import simple_cnn
 
 
 def train(model, train_dataset, validation_dataset, config):
-    train_size = int(0.85 * 8000)
-    val_size = int(0.15 * 8000)
-    model.fit(train_dataset.batch(config.batch_size).repeat(),
-              steps_per_epoch=train_size // config.batch_size,
-              validation_data=validation_dataset.batch(
-                  config.batch_size).repeat(),
-              validation_steps=val_size // config.batch_size,
-              callbacks=[WandbCallback()],
-              epochs=config.epochs)
+    callbacks = []
+    if not config.no_wandb:
+        callbacks = [WandbCallback(save_model=False)]
+
+    model.fit(
+        train_dataset.batch(config.batch_size).repeat(),
+        steps_per_epoch=config.train_sample_count // config.batch_size,
+        validation_data=validation_dataset.batch(config.batch_size).repeat(),
+        validation_steps=config.validation_sample_count // config.batch_size,
+        callbacks=callbacks,
+        epochs=config.epochs)
 
 
 def test():
@@ -37,6 +39,11 @@ def main():
                         default=10,
                         metavar='N',
                         help='number of epochs to train (default: 10)')
+    parser.add_argument('--train_split',
+                        type=float,
+                        default=0.9,
+                        metavar='f',
+                        help='train/validation split (default: 0.9)')
     parser.add_argument('--no_wandb',
                         action='store_true',
                         help='do not send the results to wandb')
@@ -45,21 +52,26 @@ def main():
     config = args
 
     if not config.no_wandb:
-        wandb.init(config=args, project='covid19', entity='erikbavenstrand')
+        wandb.init(config=args,
+                   project='covid19',
+                   entity='erikbavenstrand',
+                   save_code=False)
         config = wandb.config
 
-    NUM_TRAINING_SAMPLES = 8000
-    BATCH_SIZE = 64
-    train_size = int(0.85 * NUM_TRAINING_SAMPLES)
-    val_size = int(0.15 * NUM_TRAINING_SAMPLES)
+    config.sample_count = get_tfrecord_sample_count()
+    config.train_sample_count = int(config.train_split * config.sample_count)
+    config.validation_sample_count = int(
+        (1 - config.train_split) * config.sample_count)
 
     dataset = read_tfrecord_files()
-    train_dataset = dataset.take(train_size)
-    validation_dataset = dataset.skip(train_size).take(val_size)
+    train_dataset = dataset.take(config.train_sample_count)
+    validation_dataset = dataset.skip(config.train_sample_count).take(
+        config.validation_sample_count)
 
     model = simple_cnn.model()
 
     train(model, train_dataset, validation_dataset, config)
+    test()
 
 
 if __name__ == "__main__":
