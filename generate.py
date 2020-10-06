@@ -40,7 +40,7 @@ def _byte_list(values):
 def _to_tfrecord(tfrec_filewriter, image, label, file_name):
     feature = {
         'image': _byte_list(image),
-        'label': _int64_list([label]),
+        'label': _int64_list(label),
         'file_name': _byte_list(file_name),
     }
     return tf.train.Example(features=tf.train.Features(feature=feature))
@@ -65,11 +65,10 @@ def _encode_image_tfrecord_windows(file_name):
 
 
 def _encode_image_tfrecord_common(class_folders, file_name):
-    image_label = tf.argmax(tf.map_fn(
-        lambda x: tf.strings.regex_full_match(file_name, x),
-        class_folders,
-        fn_output_signature=tf.bool),
-                            output_type=tf.dtypes.int32)
+    image_label = tf.cast(
+        tf.map_fn(lambda x: tf.strings.regex_full_match(file_name, x),
+                  class_folders,
+                  fn_output_signature=tf.bool), tf.int64)
     image = tf.io.read_file(file_name)
     image = tf.image.decode_jpeg(image, channels=3)
     image = tf.image.resize(image, [WIDTH, HEIGHT])
@@ -81,13 +80,13 @@ def _encode_image_tfrecord_common(class_folders, file_name):
 def _decode_image_tfrecord(example):
     features = {
         'image': tf.io.FixedLenFeature([], tf.string),
-        'label': tf.io.FixedLenFeature([1], tf.int64),
+        'label': tf.io.FixedLenFeature([2], tf.int64),
         'file_name': tf.io.FixedLenFeature([], tf.string),
     }
     example = tf.io.parse_single_example(example, features)
 
     image = tf.image.decode_jpeg(example['image'], channels=3) / 255
-    label = example['label'][0]
+    label = example['label']
     file_name = example['file_name']
 
     return image, label

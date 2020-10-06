@@ -15,15 +15,11 @@ def model(img_width=224, img_height=224):
     x = Flatten(name='flatten')(model_vgg16_conv)
     x = Dense(1024, activation='relu', name='fc1')(x)
     x = Dense(1024, activation='relu', name='fc2')(x)
-    x = Dense(1, activation='sigmoid', name='predictions')(x)
+    x = Dense(2, activation='sigmoid', name='predictions')(x)
 
     #Create your own model
     my_model = Model(inputs=input_layer, outputs=x)
     my_model.layers[1].trainable = False
-
-    my_model.compile(loss='binary_crossentropy',
-                     optimizer='rmsprop',
-                     metrics=['accuracy'])
 
     #In the summary, weights and layers from VGG part will be hidden, but they will be fit during the training
     return my_model

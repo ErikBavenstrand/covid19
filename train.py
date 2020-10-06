@@ -5,15 +5,34 @@ import argparse
 
 import wandb
 import tensorflow as tf
+from tensorflow.keras.callbacks import ModelCheckpoint
 from wandb.keras import WandbCallback
 from generate import read_tfrecord_files, get_tfrecord_sample_count
 from Models import simple_cnn, vgg16
+from Utils import grad_cam, make_dir
+
+
+def get_callbacks(config):
+    callbacks = []
+
+    if config.save_model:
+        print('Saving model as ' + config.save_model)
+        filepath = './Saved Models'
+        make_dir(filepath)
+        callbacks.append(
+            ModelCheckpoint(filepath=filepath + '/' + config.save_model,
+                            save_best_only=True,
+                            save_weights_only=False,
+                            monitor='val_accuracy',
+                            mode='max',
+                            verbose=1))
+    return callbacks
 
 
 def train(model, train_dataset, validation_dataset, config):
-    callbacks = []
+    callbacks = get_callbacks(config)
     if not config.no_wandb:
-        callbacks = [WandbCallback(save_model=False)]
+        callbacks.append([WandbCallback(save_model=False)])
 
     model.fit(
         train_dataset.batch(config.batch_size).repeat(),
@@ -22,6 +41,8 @@ def train(model, train_dataset, validation_dataset, config):
         validation_steps=config.validation_sample_count // config.batch_size,
         callbacks=callbacks,
         epochs=config.epochs)
+
+    return model
 
 
 def test():
@@ -45,6 +66,10 @@ def main():
                         default=0.9,
                         metavar='f',
                         help='train/validation split (default: 0.9)')
+    parser.add_argument('--save_model',
+                        type=str,
+                        metavar='FILENAME',
+                        help='filename of model weights')
     parser.add_argument('--no_wandb',
                         action='store_true',
                         help='do not send the results to wandb')
@@ -69,9 +94,12 @@ def main():
     validation_dataset = dataset.skip(config.train_sample_count).take(
         config.validation_sample_count)
 
-    model = vgg16.model()
+    model = simple_cnn.model()
+    model.compile(loss='binary_crossentropy',
+                  optimizer='rmsprop',
+                  metrics=['accuracy'])
 
-    train(model, train_dataset, validation_dataset, config)
+    model = train(model, train_dataset, validation_dataset, config)
     test()
 
 
