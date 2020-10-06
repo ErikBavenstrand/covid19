@@ -175,7 +175,7 @@ def generate_tfrecord_files(tfrecords_path, images_path, images_per_file):
         .format(found_images, math.ceil(found_images / images_per_file),
                 images_per_file))
     images = tf.data.Dataset.list_files(images_path_pattern)
-    if SYSTEM == 'Linux':
+    if SYSTEM == 'Linux' or SYSTEM == 'Darwin':
         encode_image = _encode_image_tfrecord_linux
     elif SYSTEM == 'Windows':
         encode_image = _encode_image_tfrecord_windows
