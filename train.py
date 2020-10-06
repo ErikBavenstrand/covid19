@@ -9,7 +9,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint
 from wandb.keras import WandbCallback
 from generate import read_tfrecord_files, get_tfrecord_sample_count
 from Models import simple_cnn, vgg16
-from Utils import grad_cam, make_dir
+from Utils import make_dir
 
 
 def get_callbacks(config):

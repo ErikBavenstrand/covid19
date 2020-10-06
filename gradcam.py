@@ -5,11 +5,10 @@ import argparse
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import Model
+from tensorflow.keras import Model, Input
 from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import load_img, img_to_array, save_img
+from tensorflow.keras.preprocessing.image import load_img, img_to_array, save_img, array_to_img
 from Models import simple_cnn, vgg16
-from Utils import grad_cam
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
@@ -42,18 +41,25 @@ def create_image_array(folder_path):
     return image_array, file_names
 
 
-def make_gradcam_heatmap(images_array, model, classifier_layer_names):
+def make_gradcam_heatmap(images_array, model):
     last_conv_layer = find_last_conv_layer(model)
 
-    last_conv_layer_model = keras.Model(model.inputs, last_conv_layer.output)
+    last_conv_layer_model = Model(model.inputs, last_conv_layer.output)
 
-    # Create model that maps the activations of the final conv layer
-    # to the final predictions
-    classifier_input = keras.Input(shape=last_conv_layer.output.shape[1:])
+    classifier_input = Input(shape=last_conv_layer.output.shape[1:])
     x = classifier_input
+
+    after_last_conv = False
+    classifier_layer_names = []
+    for layer in model.layers:
+        if after_last_conv:
+            classifier_layer_names.append(layer.name)
+        elif find_last_conv_layer(model).name == layer.name:
+            after_last_conv = True
+
     for layer_name in classifier_layer_names:
         x = model.get_layer(layer_name)(x)
-    classifier_model = keras.Model(classifier_input, x)
+    classifier_model = Model(classifier_input, x)
 
     with tf.GradientTape() as tape:
         last_conv_layer_output = last_conv_layer_model(images_array)
@@ -98,24 +104,23 @@ def combine_heatmap_image(image_array, heatmap, file_names):
     for hm, im, name in zip(heatmap, image_array, file_names):
         jet_heatmap = jet_colors[hm]
 
-        jet_heatmap = keras.preprocessing.image.array_to_img(jet_heatmap)
+        jet_heatmap = array_to_img(jet_heatmap)
         jet_heatmap = jet_heatmap.resize(
             (image_array.shape[1], image_array.shape[2]))
-        jet_heatmap = keras.preprocessing.image.img_to_array(jet_heatmap)
+        jet_heatmap = img_to_array(jet_heatmap)
 
-        superimposed_img = jet_heatmap + im
-        superimposed_img = keras.preprocessing.image.array_to_img(
-            superimposed_img)
+        superimposed_img = jet_heatmap * 0.7 + im
+        superimposed_img = array_to_img(superimposed_img)
 
-        folder = './Grad Cam Output'
+        folder = './gradcam output'
         make_dir(folder)
         save_path = folder + '/' + name
         superimposed_img.save(save_path)
 
 
-def generate_gradcam(folder_path, model, classifier_layer_names):
+def generate_gradcam(folder_path, model):
     image_array, file_names = create_image_array(folder_path)
-    heatmap = make_gradcam_heatmap(image_array, model, classifier_layer_names)
+    heatmap = make_gradcam_heatmap(image_array, model)
     combine_heatmap_image(image_array, heatmap, file_names)
 
 
@@ -135,6 +140,12 @@ def main():
                         default=224,
                         metavar='N',
                         help='height of image (default: 224)')
+    parser.add_argument(
+        '--test-path',
+        type=str,
+        default='./dataset/test/',
+        metavar='PATH',
+        help='path to testset images (default: ./dataset/test/)')
     args = parser.parse_args()
 
     WIDTH = args.image_width
@@ -143,10 +154,7 @@ def main():
 
     model = load_model(MODEL_PATH + args.model_name)
 
-    generate_gradcam('./test/', model, [
-        'flatten', 'dense', 'activation_3', 'dropout', 'dense_1',
-        'activation_4'
-    ])
+    generate_gradcam(args.test_path, model)
 
 
 if __name__ == "__main__":
