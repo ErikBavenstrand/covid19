@@ -52,7 +52,7 @@ def _encode_image_tfrecord_linux(file_name):
         '\.\/COVID-19 Dataset\/X-ray\/COVID.+'
     ])
 
-    return _encode_image_tfrecord_common(class_folders)
+    return _encode_image_tfrecord_common(class_folders, file_name)
 
 
 def _encode_image_tfrecord_windows(file_name):
@@ -61,10 +61,10 @@ def _encode_image_tfrecord_windows(file_name):
         '\.\\\\COVID-19 Dataset\\\\X-ray\\\\COVID.+'
     ])
 
-    return _encode_image_tfrecord_common(class_folders)
+    return _encode_image_tfrecord_common(class_folders, file_name)
 
 
-def _encode_image_tfrecord_common(class_folders):
+def _encode_image_tfrecord_common(class_folders, file_name):
     image_label = tf.argmax(tf.map_fn(
         lambda x: tf.strings.regex_full_match(file_name, x),
         class_folders,

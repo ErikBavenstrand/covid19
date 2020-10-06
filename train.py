@@ -4,9 +4,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import argparse
 
 import wandb
+import tensorflow as tf
 from wandb.keras import WandbCallback
 from generate import read_tfrecord_files, get_tfrecord_sample_count
-from Models import simple_cnn
+from Models import simple_cnn, vgg16
 
 
 def train(model, train_dataset, validation_dataset, config):
@@ -68,11 +69,13 @@ def main():
     validation_dataset = dataset.skip(config.train_sample_count).take(
         config.validation_sample_count)
 
-    model = simple_cnn.model()
+    model = vgg16.model()
 
     train(model, train_dataset, validation_dataset, config)
     test()
 
 
 if __name__ == "__main__":
+    if tf.config.list_physical_devices('GPU'):
+        print("Using GPU")
     main()
