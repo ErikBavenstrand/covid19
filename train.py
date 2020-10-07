@@ -1,14 +1,15 @@
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 from Utils import make_dir
-from Models import simple_cnn, vgg16
+from Models import simple_cnn, vgg16, vgg16cam
 from generate import read_tfrecord_files, get_tfrecord_sample_count
 from wandb.keras import WandbCallback
 from tensorflow.keras.callbacks import ModelCheckpoint
 import tensorflow as tf
 import wandb
 import argparse
-import os
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 def get_callbacks(config):
@@ -26,6 +27,7 @@ def get_callbacks(config):
                 monitor="val_accuracy",
                 mode="max",
                 verbose=1,
+                save_freq="epoch",
             )
         )
     return callbacks
@@ -112,6 +114,8 @@ def main():
         model = simple_cnn.model()
     elif config.model == "vgg16":
         model = vgg16.model()
+    elif config.model == "vgg16cam":
+        model = vgg16cam.model()
     else:
         raise ValueError("Model does not exist. Check ./Models")
     model.compile(loss="binary_crossentropy", optimizer="rmsprop", metrics=["accuracy"])

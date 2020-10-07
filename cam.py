@@ -1,7 +1,11 @@
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 from Utils import make_dir
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
-from Models import simple_cnn, vgg16
+from Models import simple_cnn, vgg16, vgg16cam
 from tensorflow.keras.preprocessing.image import (
     load_img,
     img_to_array,
@@ -9,13 +13,13 @@ from tensorflow.keras.preprocessing.image import (
     array_to_img,
 )
 from tensorflow.keras.models import load_model
+from tensorflow.keras.layers import Conv2D
 from tensorflow.keras import Model, Input
+from tensorflow.keras.backend import function
 import tensorflow as tf
 import numpy as np
 import argparse
-import os
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+import math
 
 
 WIDTH = 224
@@ -24,7 +28,7 @@ HEIGHT = 224
 
 def find_last_conv_layer(model):
     for layer in reversed(model.layers):
-        if len(layer.output_shape) == 4:
+        if len(layer.output_shape) == 4 and isinstance(layer, Conv2D):
             return layer
     raise ValueError("Could not find conv layer. Cannot apply GradCAM.")
 
@@ -46,7 +50,8 @@ def create_image_array(folder_path):
     return image_array, file_names
 
 
-def make_gradcam_heatmap(images_array, model):
+# BATCH SIZE NOT IMPLEMENTED
+def make_gradcam_heatmap(images_array, model, batch_size):
     last_conv_layer = find_last_conv_layer(model)
 
     last_conv_layer_model = Model(model.inputs, last_conv_layer.output)
@@ -100,7 +105,7 @@ def make_gradcam_heatmap(images_array, model):
     return heatmap
 
 
-def combine_heatmap_image(image_array, heatmap, file_names):
+def combine_heatmap_image(image_array, heatmap, file_names, folder_path):
     image_array = np.uint8(255 * image_array)
     heatmap = np.uint8(255 * heatmap)
 
@@ -118,16 +123,55 @@ def combine_heatmap_image(image_array, heatmap, file_names):
         superimposed_img = jet_heatmap * 0.7 + im
         superimposed_img = array_to_img(superimposed_img)
 
-        folder = "./gradcam output"
-        make_dir(folder)
-        save_path = folder + "/" + name
+        make_dir(folder_path)
+        save_path = folder_path + name
         superimposed_img.save(save_path)
 
 
-def generate_gradcam(folder_path, model):
-    image_array, file_names = create_image_array(folder_path)
-    heatmap = make_gradcam_heatmap(image_array, model)
-    combine_heatmap_image(image_array, heatmap, file_names)
+# Need to add support for both classes in some way
+def make_cam_heatmap(images_array, model, batch_size):
+    class_weights = model.layers[-1].get_weights()[0]
+    last_conv_layer = find_last_conv_layer(model)
+
+    get_output = function([model.input], [last_conv_layer.output, model.output])
+
+    batches = np.array_split(
+        images_array, math.ceil(images_array.shape[0] / batch_size)
+    )
+
+    heatmap = np.zeros(
+        dtype=np.float32,
+        shape=(images_array.shape[0], *last_conv_layer.output.shape[1:3]),
+    )
+
+    for i, batch in enumerate(batches):
+        images_in_batch = batch.shape[0]
+        current_index = i * images_in_batch
+        [conv_outputs, predictions] = get_output(batch)
+
+        target_class = 1
+        for j, w in enumerate(class_weights[:, target_class]):
+            heatmap[current_index : current_index + images_in_batch] += (
+                w * conv_outputs[:, :, :, j]
+            )
+
+    max_heatmap = np.maximum(heatmap, 0)
+    for i in range(images_array.shape[0]):
+        heatmap[i] = max_heatmap[i] / np.max(heatmap[i])
+
+    return heatmap
+
+
+def generate_gradcam(args, model):
+    image_array, file_names = create_image_array(args.test_path)
+    heatmap = make_gradcam_heatmap(image_array, model, args.batch_size)
+    combine_heatmap_image(image_array, heatmap, file_names, "./gradcam output/")
+
+
+def generate_cam(args, model):
+    image_array, file_names = create_image_array(args.test_path)
+    heatmap = make_cam_heatmap(image_array, model, args.batch_size)
+    combine_heatmap_image(image_array, heatmap, file_names, "./cam output/")
 
 
 def main():
@@ -156,6 +200,16 @@ def main():
         metavar="PATH",
         help="path to testset images (default: ./dataset/test/)",
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=64,
+        metavar="N",
+        help="input batch size for training (default: 64)",
+    )
+    parser.add_argument(
+        "--grad-cam", action="store_true", help="run GradCAM instead of CAM"
+    )
     args = parser.parse_args()
 
     WIDTH = args.image_width
@@ -164,7 +218,10 @@ def main():
 
     model = load_model(MODEL_PATH + args.model_name)
 
-    generate_gradcam(args.test_path, model)
+    if args.grad_cam:
+        generate_gradcam(args, model)
+    else:
+        generate_cam(args, model)
 
 
 if __name__ == "__main__":
