@@ -1,15 +1,13 @@
+from Utils import make_dir
+from Models import simple_cnn, vgg16
+from generate import read_tfrecord_files, get_tfrecord_sample_count
+from wandb.keras import WandbCallback
+from tensorflow.keras.callbacks import ModelCheckpoint
+import tensorflow as tf
+import wandb
+import argparse
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
-import argparse
-
-import wandb
-import tensorflow as tf
-from tensorflow.keras.callbacks import ModelCheckpoint
-from wandb.keras import WandbCallback
-from generate import read_tfrecord_files, get_tfrecord_sample_count
-from Models import simple_cnn, vgg16
-from Utils import make_dir
 
 
 def get_callbacks(config):

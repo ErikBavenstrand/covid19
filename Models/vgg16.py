@@ -11,7 +11,7 @@ def model(img_width=224, img_height=224):
     model_vgg16_conv = VGG16(weights='imagenet',
                              include_top=False,
                              input_shape=(img_width, img_height, 3))
-    model_vgg16_conv.trainable = False
+
     x = Flatten(name='flatten')(model_vgg16_conv.output)
     x = Dense(1024, activation='relu', name='fc1')(x)
     x = Dense(1024, activation='relu', name='fc2')(x)

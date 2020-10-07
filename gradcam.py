@@ -1,18 +1,16 @@
+from Utils import make_dir
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+from Models import simple_cnn, vgg16
+from tensorflow.keras.preprocessing.image import load_img, img_to_array, save_img, array_to_img
+from tensorflow.keras.models import load_model
+from tensorflow.keras import Model, Input
+import tensorflow as tf
+import numpy as np
+import argparse
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-import argparse
-
-import numpy as np
-import tensorflow as tf
-from tensorflow.keras import Model, Input
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing.image import load_img, img_to_array, save_img, array_to_img
-from Models import simple_cnn, vgg16
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-
-from Utils import make_dir
 
 WIDTH = 224
 HEIGHT = 224

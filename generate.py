@@ -1,17 +1,16 @@
+from Utils import make_dir
+import numpy as np
+import tensorflow as tf
+from tqdm import tqdm
+from glob import glob
+import cv2
+import platform
+import ntpath
+import math
+import argparse
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
-import argparse
-import math
-import ntpath
-import platform
-
-import cv2
-from glob import glob
-from tqdm import tqdm
-import tensorflow as tf
-import numpy as np
-from Utils import make_dir
 
 # Default values
 AUTO = tf.data.experimental.AUTOTUNE
@@ -225,8 +224,7 @@ if __name__ == '__main__':
         type=str,
         default='./COVID-19 Dataset/X-ray/',
         metavar='PATH',
-        help=
-        'images path to generate records from (default: ./COVID-19 Dataset/X-ray/)'
+        help='images path to generate records from (default: ./COVID-19 Dataset/X-ray/)'
     )
     parser.add_argument('--tfrecords-path',
                         type=str,
