@@ -2,14 +2,20 @@ from Utils import make_dir
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from Models import simple_cnn, vgg16
-from tensorflow.keras.preprocessing.image import load_img, img_to_array, save_img, array_to_img
+from tensorflow.keras.preprocessing.image import (
+    load_img,
+    img_to_array,
+    save_img,
+    array_to_img,
+)
 from tensorflow.keras.models import load_model
 from tensorflow.keras import Model, Input
 import tensorflow as tf
 import numpy as np
 import argparse
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 WIDTH = 224
@@ -31,8 +37,9 @@ def create_image_array(folder_path):
     file_names = []
 
     for image_number, image_path in enumerate(files):
-        rescaled_image = load_img(folder_path + image_path,
-                                  target_size=(WIDTH, HEIGHT, 3))
+        rescaled_image = load_img(
+            folder_path + image_path, target_size=(WIDTH, HEIGHT, 3)
+        )
         image_array[image_number] = img_to_array(rescaled_image) / 255
         file_names.append(image_path)
 
@@ -64,11 +71,13 @@ def make_gradcam_heatmap(images_array, model):
         tape.watch(last_conv_layer_output)
         preds = classifier_model(last_conv_layer_output)
         top_pred_index = tf.argmax(preds, axis=1)
-        one_hot_mask = tf.one_hot(top_pred_index,
-                                  preds.shape[1],
-                                  on_value=True,
-                                  off_value=False,
-                                  dtype=tf.bool)
+        one_hot_mask = tf.one_hot(
+            top_pred_index,
+            preds.shape[1],
+            on_value=True,
+            off_value=False,
+            dtype=tf.bool,
+        )
         top_class_channel = tf.boolean_mask(preds, one_hot_mask)
 
     grads = tape.gradient(top_class_channel, last_conv_layer_output)
@@ -87,7 +96,7 @@ def make_gradcam_heatmap(images_array, model):
     for i in range(pooled_grads.shape[0]):
         heatmap[i] = max_heatmap[i] / np.max(heatmap[i])
 
-    #heatmap = np.where(heatmap < 0.3, 0, heatmap)
+    # heatmap = np.where(heatmap < 0.3, 0, heatmap)
     return heatmap
 
 
@@ -95,7 +104,7 @@ def combine_heatmap_image(image_array, heatmap, file_names):
     image_array = np.uint8(255 * image_array)
     heatmap = np.uint8(255 * heatmap)
 
-    jet = cm.get_cmap('inferno')
+    jet = cm.get_cmap("inferno")
 
     jet_colors = jet(np.arange(256))[:, :3]
 
@@ -103,16 +112,15 @@ def combine_heatmap_image(image_array, heatmap, file_names):
         jet_heatmap = jet_colors[hm]
 
         jet_heatmap = array_to_img(jet_heatmap)
-        jet_heatmap = jet_heatmap.resize(
-            (image_array.shape[1], image_array.shape[2]))
+        jet_heatmap = jet_heatmap.resize((image_array.shape[1], image_array.shape[2]))
         jet_heatmap = img_to_array(jet_heatmap)
 
         superimposed_img = jet_heatmap * 0.7 + im
         superimposed_img = array_to_img(superimposed_img)
 
-        folder = './gradcam output'
+        folder = "./gradcam output"
         make_dir(folder)
-        save_path = folder + '/' + name
+        save_path = folder + "/" + name
         superimposed_img.save(save_path)
 
 
@@ -124,31 +132,35 @@ def generate_gradcam(folder_path, model):
 
 def main():
     parser = argparse.ArgumentParser(description="Train a COVID-19 Classifier")
-    parser.add_argument('--model-name',
-                        type=str,
-                        metavar='FILENAME',
-                        help='filename of model weights')
-    parser.add_argument('--image-width',
-                        type=int,
-                        default=224,
-                        metavar='N',
-                        help='width of image (default: 224)')
-    parser.add_argument('--image-height',
-                        type=int,
-                        default=224,
-                        metavar='N',
-                        help='height of image (default: 224)')
     parser.add_argument(
-        '--test-path',
+        "--model-name", type=str, metavar="FILENAME", help="filename of model weights"
+    )
+    parser.add_argument(
+        "--image-width",
+        type=int,
+        default=224,
+        metavar="N",
+        help="width of image (default: 224)",
+    )
+    parser.add_argument(
+        "--image-height",
+        type=int,
+        default=224,
+        metavar="N",
+        help="height of image (default: 224)",
+    )
+    parser.add_argument(
+        "--test-path",
         type=str,
-        default='./dataset/test/',
-        metavar='PATH',
-        help='path to testset images (default: ./dataset/test/)')
+        default="./dataset/test/",
+        metavar="PATH",
+        help="path to testset images (default: ./dataset/test/)",
+    )
     args = parser.parse_args()
 
     WIDTH = args.image_width
     HEIGHT = args.image_height
-    MODEL_PATH = './Saved Models/'
+    MODEL_PATH = "./Saved Models/"
 
     model = load_model(MODEL_PATH + args.model_name)
 
