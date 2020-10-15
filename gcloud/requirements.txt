@@ -1,0 +1,4 @@
+#tensorflow==2.3.1
+opencv-python==4.4.0.42
+wandb==0.10.4
+tqdm==4.46.0

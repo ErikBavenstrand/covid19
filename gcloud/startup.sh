@@ -62,17 +62,16 @@ git clone https://carpool-master:$GITHUB_PWD@github.com/ErikBavenstrand/covid19.
 cd covid19
 sudo pip install -q -r requirements.txt
 
-if $FETCH_AND_PROCESS_DATASET; then
+if $FETCH_DATASET; then
     echo "$ECHO_PREFIX Get Egypt Dataset file, can take a couple of minutes..."
     wget -q https://md-datasets-cache-zipfiles-prod.s3.eu-west-1.amazonaws.com/8h65ywd2jr-3.zip
     echo "$ECHO_PREFIX Unzipping dataset. Will probably also take a little while..."
     sudo unzip -q 8h65ywd2jr-3.zip
     sudo unzip -q COVID-19\ Dataset.zip
     sudo rm 8h65ywd2jr-3.zip COVID-19\ Dataset.zip
-
-    echo "$ECHO_PREFIX Generate the tfrecords"
-    sudo python3 generate.py
 fi
 
+echo "$ECHO_PREFIX Generate the tfrecords"
+sudo python3 generate.py
 sudo wandb login $APIKEY
 sudo python3 train.py
