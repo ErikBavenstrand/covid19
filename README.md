@@ -5,7 +5,7 @@
 
 ## Using the gcloud command
 The two gcloud commands available in [gcloudcompute](/gcloud/gcloudcompute) should be 
-run in a GCP project within the **cloud shell**. The first command is equivalent 
+run in a GCP project within the `Cloud Shell`. The first command is equivalent 
 to the second, with one exception, the first command instantiates the VM with a 
 GPU. For testing purposes it is simply cheaper to use the non-GPU option.
 
