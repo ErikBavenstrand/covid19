@@ -52,9 +52,35 @@ def train(model, train_dataset, validation_dataset, config):
     return model
 
 
+def test_confidence(model, dataset, config):
+    # TODO: Refactor import/figure output
+    import matplotlib.pyplot as plt
+    predictions = model.predict(dataset.batch(config.batch_size))
+
+    # TODO: Move constants to config
+    LIMIT = 8
+    DISP_ROWS = 2
+
+    # TODO: Assert correct guess by model, right now we're just taking the most
+    # likely guesses whether correct or not.
+    covid_predictions = predictions[:, 0]
+    ordered_predictions = covid_predictions.argsort()
+    most_unlikely = ordered_predictions[:LIMIT]
+    most_likely_predictions = ordered_predictions[-LIMIT:]
+
+    imgndx = 1
+    rows = DISP_ROWS
+    cols = LIMIT // DISP_ROWS
+    # Can't index into dataset/numpy iterator as far as I know
+    for ndx, (record, label) in enumerate(dataset.as_numpy_iterator()):
+        if ndx in most_likely_predictions:
+            plt.subplot(rows, cols, imgndx)
+            plt.imshow(record)
+            imgndx += 1
+    plt.show()
+
 def test():
     pass
-
 
 def main():
     parser = argparse.ArgumentParser(description="Train a COVID-19 Classifier")
@@ -126,7 +152,9 @@ def main():
     model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
 
     model = train(model, train_dataset, validation_dataset, config)
-    test()
+
+    # TODO: Remove subsetting after test results are satisfactory
+    test_confidence(model, validation_dataset.take(20), config)
 
 
 if __name__ == "__main__":
