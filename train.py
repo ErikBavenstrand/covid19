@@ -3,7 +3,7 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from Utils import make_dir
-from Models import simple_cnn, vgg16, vgg16cam
+from Models import simple_cnn, vgg16, vgg16cam, resnet50
 from generate import read_tfrecord_files, get_tfrecord_sample_count
 from wandb.keras import WandbCallback
 from tensorflow.keras.callbacks import ModelCheckpoint
@@ -45,6 +45,8 @@ def train(model, train_dataset, validation_dataset, config):
         validation_steps=config.validation_sample_count // config.batch_size,
         callbacks=callbacks,
         epochs=config.epochs,
+        use_multiprocessing=True,
+        workers=8,
     )
 
     return model
@@ -116,9 +118,12 @@ def main():
         model = vgg16.model()
     elif config.model == "vgg16cam":
         model = vgg16cam.model()
+    elif config.model == "resnet50":
+        model = resnet50.model()
     else:
         raise ValueError("Model does not exist. Check ./Models")
-    model.compile(loss="binary_crossentropy", optimizer="rmsprop", metrics=["accuracy"])
+
+    model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
 
     model = train(model, train_dataset, validation_dataset, config)
     test()
