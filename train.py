@@ -8,6 +8,7 @@ from generate import read_tfrecord_files, get_tfrecord_sample_count
 from wandb.keras import WandbCallback
 from tensorflow.keras.callbacks import ModelCheckpoint
 import tensorflow as tf
+import numpy as np
 import wandb
 import argparse
 
@@ -45,15 +46,23 @@ def train(model, train_dataset, validation_dataset, config):
         validation_steps=config.validation_sample_count // config.batch_size,
         callbacks=callbacks,
         epochs=config.epochs,
-        use_multiprocessing=True,
-        workers=8,
     )
 
     return model
 
 
-def test():
-    pass
+def test_eval(model, dataset, config):
+    return model.evaluate(
+        dataset.batch(config.batch_size).repeat(),
+        steps=config.test_samples // config.batch_size,
+    )
+
+
+def test_pred(model, dataset, config):
+    return model.predict(
+        dataset.batch(config.batch_size).repeat(),
+        steps=config.test_samples // config.batch_size,
+    )
 
 
 def main():
@@ -77,7 +86,14 @@ def main():
         type=float,
         default=0.9,
         metavar="f",
-        help="train/validation split (default: 0.9)",
+        help="train/validation split (default: 0.95)",
+    )
+    parser.add_argument(
+        "--test-samples",
+        type=int,
+        default=1000,
+        metavar="n",
+        help="number of test samples (default: 1000)",
     )
     parser.add_argument(
         "--model",
@@ -103,14 +119,19 @@ def main():
         config = wandb.config
 
     config.sample_count = get_tfrecord_sample_count()
-    config.train_sample_count = int(config.train_split * config.sample_count)
-    config.validation_sample_count = int((1 - config.train_split) * config.sample_count)
+    config.train_sample_count = int(
+        config.train_split * (config.sample_count - config.test_samples)
+    )
+    config.validation_sample_count = int(
+        (1 - config.train_split) * (config.sample_count - config.test_samples)
+    )
 
     dataset = read_tfrecord_files()
-    train_dataset = dataset.take(config.train_sample_count)
-    validation_dataset = dataset.skip(config.train_sample_count).take(
-        config.validation_sample_count
-    )
+    test_dataset = dataset.take(config.test_samples)
+    train_dataset = dataset.skip(config.test_samples).take(config.train_sample_count)
+    validation_dataset = dataset.skip(
+        config.train_sample_count + config.test_samples
+    ).take(config.validation_sample_count)
 
     if config.model == "simple_cnn":
         model = simple_cnn.model()
@@ -125,8 +146,11 @@ def main():
 
     model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
 
-    model = train(model, train_dataset, validation_dataset, config)
-    test()
+    # model = train(model, train_dataset, validation_dataset, config)
+    # test_loss, test_acc = test_eval(model, test_dataset, config)
+    # print("Test acc", test_acc)
+
+    print(test_pred(model, test_dataset, config))
 
 
 if __name__ == "__main__":

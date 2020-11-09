@@ -202,7 +202,7 @@ def generate_tfrecord_files(tfrecords_path, images_path, images_per_file):
 
 def read_tfrecord_files(tfrecords_path="./dataset/train/"):
     option_no_order = tf.data.Options()
-    option_no_order.experimental_deterministic = False
+    option_no_order.experimental_deterministic = True
 
     filenames_tf = tf.io.gfile.glob(tfrecords_path + "*.tfrecord")
     dataset = tf.data.TFRecordDataset(filenames_tf, num_parallel_reads=AUTO)
