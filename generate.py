@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 from glob import glob
+import Augmentor
 import cv2
 import platform
 import ntpath
@@ -262,13 +263,55 @@ if __name__ == "__main__":
         action="store_true",
         help="skip conversion and renaming of images",
     )
+    parser.add_argument(
+        "--updated-dataset",
+        default=True,
+        action="store_false",
+        help="use the new dataset",
+    )
     args = parser.parse_args()
 
-    WIDTH = args.image_width
-    HEIGHT = args.image_height
+    if args.updated_dataset:
+        p = Augmentor.Pipeline(
+            source_directory="./data_upload_v2/train/covid/",
+            output_directory="../../../dataset/train/covid/",
+        )
+        p.flip_left_right(probability=0.5)
+        p.rotate(probability=1, max_left_rotation=12.5, max_right_rotation=12.5)
+        p.random_distortion(probability=1, grid_width=4, grid_height=4, magnitude=8)
+        p.greyscale(probability=1)
+        for i in range(6):
+            p.process()
 
-    if not args.skip_conversion:
-        rename_files_enumerate(args.images_path)
-        convert_images_to_jpg(args.images_path)
+        p = Augmentor.Pipeline(
+            source_directory="./data_upload_v2/train/non/",
+            output_directory="../../../dataset/train/non/",
+        )
+        p.greyscale(probability=1)
+        p.process()
 
-    generate_tfrecord_files(args.tfrecords_path, args.images_path, args.images_per_file)
+        p = Augmentor.Pipeline(
+            source_directory="./data_upload_v2/test/covid/",
+            output_directory="../../../dataset/test/covid/",
+        )
+        p.greyscale(probability=1)
+        p.process()
+
+        p = Augmentor.Pipeline(
+            source_directory="./data_upload_v2/test/non/",
+            output_directory="../../../dataset/test/non/",
+        )
+        p.greyscale(probability=1)
+        p.process()
+
+    else:
+        WIDTH = args.image_width
+        HEIGHT = args.image_height
+
+        if not args.skip_conversion:
+            rename_files_enumerate(args.images_path)
+            convert_images_to_jpg(args.images_path)
+
+        generate_tfrecord_files(
+            args.tfrecords_path, args.images_path, args.images_per_file
+        )

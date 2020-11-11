@@ -7,10 +7,14 @@ from Models import simple_cnn, vgg16, vgg16cam, resnet50
 from generate import read_tfrecord_files, get_tfrecord_sample_count
 from wandb.keras import WandbCallback
 from tensorflow.keras.callbacks import ModelCheckpoint
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import matplotlib.pyplot as plt
 import tensorflow as tf
+import tensorflow_datasets as tfds
 import numpy as np
 import wandb
 import argparse
+import glob
 
 
 def get_callbacks(config):
@@ -65,6 +69,31 @@ def test_pred(model, dataset, config):
     )
 
 
+augmentation_transform = ImageDataGenerator(
+    featurewise_center=False,
+    featurewise_std_normalization=False,
+    rotation_range=10,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    horizontal_flip=True,
+    brightness_range=(0.9, 1.1),
+    zoom_range=(0.85, 1.15),
+    fill_mode="constant",
+    cval=0.0,
+    rescale=1.0 / 255,
+)
+
+
+def make_generator(path):
+    train_generator = augmentation_transform.flow_from_directory(
+        path,
+        target_size=(224, 224),
+        class_mode="categorical",
+        batch_size=32,
+    )
+    return train_generator
+
+
 def main():
     parser = argparse.ArgumentParser(description="Train a COVID-19 Classifier")
     parser.add_argument(
@@ -89,18 +118,17 @@ def main():
         help="train/validation split (default: 0.95)",
     )
     parser.add_argument(
-        "--test-samples",
-        type=int,
-        default=1000,
-        metavar="n",
-        help="number of test samples (default: 1000)",
-    )
-    parser.add_argument(
         "--model",
         type=str,
-        default="simple_cnn",
+        default="resnet50",
         metavar="MODEL",
-        help="model name (default: simple_cnn)",
+        help="model name (default: resnet50)",
+    )
+    parser.add_argument(
+        "--updated-dataset",
+        default=True,
+        action="store_false",
+        help="use the new dataset",
     )
     parser.add_argument(
         "--save-model", type=str, metavar="FILENAME", help="filename of model weights"
@@ -118,21 +146,6 @@ def main():
         )
         config = wandb.config
 
-    config.sample_count = get_tfrecord_sample_count()
-    config.train_sample_count = int(
-        config.train_split * (config.sample_count - config.test_samples)
-    )
-    config.validation_sample_count = int(
-        (1 - config.train_split) * (config.sample_count - config.test_samples)
-    )
-
-    dataset = read_tfrecord_files()
-    test_dataset = dataset.take(config.test_samples)
-    train_dataset = dataset.skip(config.test_samples).take(config.train_sample_count)
-    validation_dataset = dataset.skip(
-        config.train_sample_count + config.test_samples
-    ).take(config.validation_sample_count)
-
     if config.model == "simple_cnn":
         model = simple_cnn.model()
     elif config.model == "vgg16":
@@ -146,11 +159,50 @@ def main():
 
     model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
 
-    # model = train(model, train_dataset, validation_dataset, config)
+    if args.updated_dataset:
+
+        train_dataset = tf.data.Dataset.from_generator(
+            lambda: make_generator("./data_covidx/train/"),
+            (tf.float32, tf.float32),
+            (tf.TensorShape([None, 224, 224, 3]), tf.TensorShape([None, 2])),
+        ).unbatch()
+
+        validation_dataset = tf.data.Dataset.from_generator(
+            lambda: make_generator("./data_covidx/test/"),
+            (tf.float32, tf.float32),
+            (tf.TensorShape([None, 224, 224, 3]), tf.TensorShape([None, 2])),
+        ).unbatch()
+
+        config.train_sample_count = len(
+            glob.glob("data_covidx/train/**/*.*", recursive=True)
+        )
+        config.validation_sample_count = len(
+            glob.glob("data_covidx/test/**/*.*", recursive=True)
+        )
+
+    else:
+        config.sample_count = get_tfrecord_sample_count()
+        config.train_sample_count = int(
+            config.train_split * (config.sample_count - config.test_samples)
+        )
+        config.validation_sample_count = int(
+            (1 - config.train_split) * (config.sample_count - config.test_samples)
+        )
+
+        dataset = read_tfrecord_files()
+        test_dataset = dataset.take(config.test_samples)
+        train_dataset = dataset.skip(config.test_samples).take(
+            config.train_sample_count
+        )
+        validation_dataset = dataset.skip(
+            config.train_sample_count + config.test_samples
+        ).take(config.validation_sample_count)
+
+    model = train(model, train_dataset, validation_dataset, config)
     # test_loss, test_acc = test_eval(model, test_dataset, config)
     # print("Test acc", test_acc)
 
-    print(test_pred(model, test_dataset, config))
+    # print(test_pred(model, test_dataset, config))
 
 
 if __name__ == "__main__":
