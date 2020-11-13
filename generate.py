@@ -1,6 +1,8 @@
 from Utils import make_dir
 import numpy as np
 import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from sklearn.utils import class_weight
 from tqdm import tqdm
 from glob import glob
 import Augmentor
@@ -19,8 +21,6 @@ AUTO = tf.data.experimental.AUTOTUNE
 WIDTH = 224
 HEIGHT = 224
 SYSTEM = platform.system()
-
-# Initial dataset https://data.mendeley.com/datasets/8h65ywd2jr/3
 
 
 ######################################################
@@ -218,6 +218,32 @@ def get_tfrecord_sample_count(tfrecords_path="./dataset/train/"):
         1 for _ in tf.data.TFRecordDataset(filenames_tf, num_parallel_reads=AUTO)
     )
     return count
+
+
+augmentation_transform = ImageDataGenerator(
+    featurewise_center=False,
+    featurewise_std_normalization=False,
+    rotation_range=10,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    horizontal_flip=True,
+    brightness_range=(0.9, 1.1),
+    zoom_range=(0.85, 1.15),
+    fill_mode="constant",
+    cval=0.0,
+    rescale=1.0 / 255,
+)
+
+
+def make_generator(path):
+    train_generator = augmentation_transform.flow_from_directory(
+        path,
+        target_size=(224, 224),
+        class_mode="categorical",
+        batch_size=32,
+    )
+
+    return train_generator
 
 
 if __name__ == "__main__":

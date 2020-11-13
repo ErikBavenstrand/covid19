@@ -10,6 +10,7 @@ def model(img_width=224, img_height=224):
     )
     for layer in model_resnet50_conv.layers[:154]:
         layer.trainable = False
+    model_resnet50_conv.trainable = False
 
     x = GlobalAveragePooling2D(name="GAP")(model_resnet50_conv.output)
     x = Dense(2, activation="sigmoid", name="predictions")(x)

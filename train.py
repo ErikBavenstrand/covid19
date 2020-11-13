@@ -4,10 +4,9 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 from Utils import make_dir
 from Models import simple_cnn, vgg16, vgg16cam, resnet50
-from generate import read_tfrecord_files, get_tfrecord_sample_count
+from generate import read_tfrecord_files, get_tfrecord_sample_count, make_generator
 from wandb.keras import WandbCallback
 from tensorflow.keras.callbacks import ModelCheckpoint
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -39,6 +38,7 @@ def get_callbacks(config):
 
 
 def train(model, train_dataset, validation_dataset, config):
+
     callbacks = get_callbacks(config)
     if not config.no_wandb:
         callbacks.append([WandbCallback(save_model=False)])
@@ -50,6 +50,7 @@ def train(model, train_dataset, validation_dataset, config):
         validation_steps=config.validation_sample_count // config.batch_size,
         callbacks=callbacks,
         epochs=config.epochs,
+        class_weight={0: 13.49806576, 1: 0.51923363},
     )
 
     return model
@@ -91,40 +92,15 @@ def test():
 def test_eval(model, dataset, config):
     return model.evaluate(
         dataset.batch(config.batch_size).repeat(),
-        steps=config.test_samples // config.batch_size,
+        steps=config.test_sample_count // config.batch_size,
     )
 
 
 def test_pred(model, dataset, config):
     return model.predict(
         dataset.batch(config.batch_size).repeat(),
-        steps=config.test_samples // config.batch_size,
+        steps=config.validation_sample_count // config.batch_size,
     )
-
-
-augmentation_transform = ImageDataGenerator(
-    featurewise_center=False,
-    featurewise_std_normalization=False,
-    rotation_range=10,
-    width_shift_range=0.1,
-    height_shift_range=0.1,
-    horizontal_flip=True,
-    brightness_range=(0.9, 1.1),
-    zoom_range=(0.85, 1.15),
-    fill_mode="constant",
-    cval=0.0,
-    rescale=1.0 / 255,
-)
-
-
-def make_generator(path):
-    train_generator = augmentation_transform.flow_from_directory(
-        path,
-        target_size=(224, 224),
-        class_mode="categorical",
-        batch_size=32,
-    )
-    return train_generator
 
 
 def main():
@@ -144,13 +120,6 @@ def main():
         help="number of epochs to train (default: 10)",
     )
     parser.add_argument(
-        "--train-split",
-        type=float,
-        default=0.9,
-        metavar="f",
-        help="train/validation split (default: 0.95)",
-    )
-    parser.add_argument(
         "--model",
         type=str,
         default="resnet50",
@@ -158,10 +127,18 @@ def main():
         help="model name (default: resnet50)",
     )
     parser.add_argument(
-        "--updated-dataset",
-        default=True,
-        action="store_false",
-        help="use the new dataset",
+        "--train-path",
+        type=str,
+        default="./data_covidx/",
+        metavar="PATH",
+        help="path to train set (default: ./data_covidx/)",
+    )
+    parser.add_argument(
+        "--test-path",
+        type=str,
+        default="./data_valencia/",
+        metavar="PATH",
+        help="path to test set (default: ./data_valencia/)",
     )
     parser.add_argument(
         "--save-model", type=str, metavar="FILENAME", help="filename of model weights"
@@ -192,48 +169,35 @@ def main():
 
     model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["accuracy"])
 
-    if args.updated_dataset:
+    train_dataset = tf.data.Dataset.from_generator(
+        lambda: make_generator(args.train_path + "train"),
+        (tf.float32, tf.float32),
+        (tf.TensorShape([None, 224, 224, 3]), tf.TensorShape([None, 2])),
+    ).unbatch()
 
-        train_dataset = tf.data.Dataset.from_generator(
-            lambda: make_generator("./data_covidx/train/"),
-            (tf.float32, tf.float32),
-            (tf.TensorShape([None, 224, 224, 3]), tf.TensorShape([None, 2])),
-        ).unbatch()
+    validation_dataset = tf.data.Dataset.from_generator(
+        lambda: make_generator(args.train_path + "test"),
+        (tf.float32, tf.float32),
+        (tf.TensorShape([None, 224, 224, 3]), tf.TensorShape([None, 2])),
+    ).unbatch()
 
-        validation_dataset = tf.data.Dataset.from_generator(
-            lambda: make_generator("./data_covidx/test/"),
-            (tf.float32, tf.float32),
-            (tf.TensorShape([None, 224, 224, 3]), tf.TensorShape([None, 2])),
-        ).unbatch()
+    test_dataset = tf.data.Dataset.from_generator(
+        lambda: make_generator(args.test_path),
+        (tf.float32, tf.float32),
+        (tf.TensorShape([None, 224, 224, 3]), tf.TensorShape([None, 2])),
+    ).unbatch()
 
-        config.train_sample_count = len(
-            glob.glob("data_covidx/train/**/*.*", recursive=True)
-        )
-        config.validation_sample_count = len(
-            glob.glob("data_covidx/test/**/*.*", recursive=True)
-        )
-
-    else:
-        config.sample_count = get_tfrecord_sample_count()
-        config.train_sample_count = int(
-            config.train_split * (config.sample_count - config.test_samples)
-        )
-        config.validation_sample_count = int(
-            (1 - config.train_split) * (config.sample_count - config.test_samples)
-        )
-
-        dataset = read_tfrecord_files()
-        test_dataset = dataset.take(config.test_samples)
-        train_dataset = dataset.skip(config.test_samples).take(
-            config.train_sample_count
-        )
-        validation_dataset = dataset.skip(
-            config.train_sample_count + config.test_samples
-        ).take(config.validation_sample_count)
+    config.train_sample_count = len(
+        glob.glob(args.train_path + "train/**/*.*", recursive=True)
+    )
+    config.validation_sample_count = len(
+        glob.glob(args.train_path + "test/**/*.*", recursive=True)
+    )
+    config.test_sample_count = len(glob.glob(args.test_path + "**/*.*", recursive=True))
 
     model = train(model, train_dataset, validation_dataset, config)
-    # test_loss, test_acc = test_eval(model, test_dataset, config)
-    # print("Test acc", test_acc)
+    test_loss, test_acc = test_eval(model, test_dataset, config)
+    print("Test acc", test_acc)
 
     # print(test_pred(model, test_dataset, config))
 
@@ -243,7 +207,7 @@ def main():
 
     # TODO: Remove subsetting after test results are satisfactory
     # test_confidence(model, validation_dataset.take(20), config)
-    # print(test_pred(model, test_dataset, config))
+    # print(test_pred(model, validation_dataset, config))
 
 
 if __name__ == "__main__":
